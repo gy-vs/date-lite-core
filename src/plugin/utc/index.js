@@ -33,6 +33,19 @@ export default (option, Dayjs, dayjs) => {
     if (keepLocalTime) {
       return ins.add(this.utcOffset(), MIN)
     }
+    // Converting a local instance to UTC keeps the instant, but remember the
+    // original local wall-clock time so a later keepLocalTime() can restore it.
+    if (!this.$u) {
+      ins.$x.$localWall = {
+        $y: this.$y,
+        $M: this.$M,
+        $D: this.$D,
+        $H: this.$H,
+        $m: this.$m,
+        $s: this.$s,
+        $ms: this.$ms
+      }
+    }
     return ins
   }
 
@@ -87,12 +100,36 @@ export default (option, Dayjs, dayjs) => {
       }
     }
     const offset = Math.abs(input) <= 16 ? input * 60 : input
-    let ins = this
     if (keepLocalTime) {
+      // Keep the local wall-clock time (the cached fields) and only swap the
+      // UTC offset, so the represented instant shifts by the offset difference.
+      // Return a brand new, internally consistent instance instead of mutating
+      // this one. The old in-place implementation changed $offset/$u on the
+      // current object, which both mutated the source and left the backing Date
+      // disagreeing with the cached fields (clone()/re-parsing then showed a
+      // different time).
+      const localWall = (this.$u && this.$x.$localWall) || this
+      const {
+        $y, $M, $D, $H, $m, $s, $ms
+      } = localWall
+      const targetTime = Date.UTC($y, $M, $D, $H, $m, $s, $ms)
+        - (offset * MILLISECONDS_A_MINUTE)
+      if (input === 0) {
+        // Interpret the retained wall-clock time as UTC and enable UTC mode.
+        return dayjs(Date.UTC($y, $M, $D, $H, $m, $s, $ms), {
+          locale: this.$L,
+          utc: true
+        })
+      }
+      // Build a host-local Date whose local fields are the retained wall time,
+      // then anchor it on the host offset at the target instant.
+      const localDate = new Date($y, $M, $D, $H, $m, $s, $ms)
+      const ins = dayjs(localDate, { locale: this.$L })
       ins.$offset = offset
-      ins.$u = input === 0
+      ins.$x.$localOffset = new Date(targetTime).getTimezoneOffset()
       return ins
     }
+    let ins = this
     if (input !== 0) {
       const localTimezoneOffset = this.$u
         ? this.toDate().getTimezoneOffset() : -1 * this.utcOffset()

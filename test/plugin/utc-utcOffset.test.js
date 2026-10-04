@@ -75,6 +75,104 @@ it('utcOffset keepLocalTime', () => {
     .toBe(moment(d2).utcOffset(5, true).format())
 })
 
+it('utcOffset keepLocalTime does not mutate the original instance', () => {
+  const d = dayjs('2023-10-29T00:00:00+03:00')
+  const before = d.format()
+  const offsets = [0, -240, 120, -480, 480, 8, -8]
+  offsets.forEach((input) => {
+    const original = dayjs('2023-10-29T00:00:00+03:00')
+    original.utcOffset(input, true)
+    expect(original.format()).toBe(before)
+    expect(original.valueOf()).toBe(dayjs('2023-10-29T00:00:00+03:00').valueOf())
+  })
+  // UTC-mode source stays in UTC mode
+  const u = dayjs.utc('2000-01-01T06:00:00Z')
+  u.utcOffset(5, true)
+  expect(u.isUTC()).toBeTruthy()
+  expect(u.format()).toBe('2000-01-01T06:00:00Z')
+})
+
+it('utcOffset keepLocalTime produces a coherent instance matching moment', () => {
+  const inputs = [
+    dayjs('2023-10-29T00:00:00+03:00'),
+    dayjs.utc('2000-01-01T06:00:00Z'),
+    dayjs('2016-01-01 00:00:00'),
+    dayjs('2023-10-29T00:00:00+03:00').utcOffset(-5)
+  ]
+  const momentInputs = [
+    moment('2023-10-29T00:00:00+03:00'),
+    moment.utc('2000-01-01T06:00:00Z'),
+    moment('2016-01-01 00:00:00'),
+    moment('2023-10-29T00:00:00+03:00').utcOffset(-5)
+  ]
+  const testOffsets = [0, -240, 120, -480, 480, 8, -8]
+  testOffsets.forEach((offset) => {
+    inputs.forEach((input, index) => {
+      const localHour = input.hour()
+      const localDate = input.date()
+      const result = input.utcOffset(offset, true)
+      const expected = momentInputs[index].utcOffset(offset, true)
+      // keeps the local wall-clock time, only swaps the offset
+      expect(result.hour()).toBe(localHour)
+      expect(result.date()).toBe(localDate)
+      expect(result.utcOffset()).toBe(expected.utcOffset())
+      // same instant as moment
+      expect(result.valueOf()).toBe(expected.valueOf())
+      expect(result.format()).toBe(expected.format())
+      // format/valueOf/toISOString agree with clone() and dayjs(result)
+      const copies = [result.clone(), dayjs(result)]
+      copies.forEach((copy) => {
+        expect(copy.format()).toBe(result.format())
+        expect(copy.valueOf()).toBe(result.valueOf())
+        expect(copy.toISOString()).toBe(result.toISOString())
+        expect(copy.utcOffset()).toBe(result.utcOffset())
+      })
+      expect(result.toDate()).toEqual(result.clone().toDate())
+    })
+  })
+})
+
+it('utcOffset(0, true) returns a coherent UTC instance', () => {
+  const result = dayjs('2023-10-29T00:00:00+03:00').utcOffset(0, true)
+  const expected = moment('2023-10-29T00:00:00+03:00').utcOffset(0, true)
+  expect(result.isUTC()).toBeTruthy()
+  expect(result.format()).toBe(expected.format())
+  expect(result.toISOString()).toBe(expected.toISOString())
+  expect(result.valueOf()).toBe(expected.valueOf())
+  expect(result.format()).toBe(result.clone().format())
+  expect(result.toISOString()).toBe(result.clone().toISOString())
+  expect(result.format()).toBe(dayjs(result).format())
+})
+
+it('utcOffset keepLocalTime is chainable', () => {
+  const d = dayjs('2023-10-29T00:00:00+03:00')
+  const result = d.utcOffset(0, true).utcOffset(5, true)
+  const expected = moment('2023-10-29T00:00:00+03:00')
+    .utcOffset(0, true).utcOffset(5, true)
+  expect(result.format()).toBe(expected.format())
+  expect(result.valueOf()).toBe(expected.valueOf())
+  expect(result.hour()).toBe(d.hour())
+})
+
+it('utcOffset keepLocalTime after switching to UTC keeps the local wall time', () => {
+  const time = '2021-02-28 19:40:10'
+  const hoursOffsets = [-8, 8, 0]
+  hoursOffsets.forEach((hoursOffset) => {
+    const result = dayjs(time).utc().utcOffset(hoursOffset * 60, true)
+    const expected = moment(time).utc(true).utcOffset(hoursOffset, true)
+    // The original local wall time is preserved with the new offset
+    expect(result.hour()).toBe(19)
+    expect(result.utcOffset()).toBe(hoursOffset * 60)
+    expect(result.format()).toBe(expected.format())
+    expect(result.valueOf()).toBe(expected.valueOf())
+    expect(result.toISOString()).toBe(expected.toISOString())
+    // copies stay consistent
+    expect(result.clone().toISOString()).toBe(result.toISOString())
+    expect(dayjs(result).toISOString()).toBe(result.toISOString())
+    expect(result.clone().format()).toBe(result.format())
+  })
+})
+
 test('UTC mode', () => {
   const d = dayjs.utc('2000-01-01T06:00:00Z')
   expect(d.isUTC()).toBeTruthy()
