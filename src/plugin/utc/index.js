@@ -89,8 +89,24 @@ export default (option, Dayjs, dayjs) => {
     const offset = Math.abs(input) <= 16 ? input * 60 : input
     let ins = this
     if (keepLocalTime) {
-      ins.$offset = offset
-      ins.$u = input === 0
+      if (input !== 0 && this.$u) {
+        // keep the original behavior for an utc instance:
+        // retag a clone with the new offset without changing its date
+        ins = this.clone()
+        ins.$offset = offset
+        ins.$u = false
+        return ins
+      }
+      // create a new instance with the same local time and the new offset
+      // instead of mutating the current instance
+      ins = dayjs(this.format('YYYY-MM-DD HH:mm:ss:SSS'), {
+        locale: this.$L,
+        utc: input === 0
+      })
+      if (input !== 0) {
+        ins.$offset = offset
+        ins.$x.$localOffset = ins.$d.getTimezoneOffset()
+      }
       return ins
     }
     if (input !== 0) {
